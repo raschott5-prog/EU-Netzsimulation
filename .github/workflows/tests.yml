@@ -1,0 +1,17 @@
+name: Tests
+on: [push, pull_request]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Testsuiten (ohne Netzzugriff, alles gemockt)
+        run: |
+          python test_grid_live.py
+          python test_e2e.py
+          python test_realdata_regression.py
+          python test_calibration.py

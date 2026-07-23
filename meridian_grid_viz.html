@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MERIDIAN Grid — EU-Netzsimulator</title>
+<style>
+  :root{
+    --bg:#0a0e14; --panel:#0f1620; --panel2:#0c1219;
+    --border:#1a2636; --border2:#223449;
+    --text:#c8d4e0; --dim:#63748a; --dim2:#455568;
+    --ok:#3ddc84; --warn:#ffb020; --bad:#ff4d4d; --cyan:#35c9d0;
+    --dc:#b48cff;
+    --mono: ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--mono);
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1240px;margin:0 auto;padding:14px}
+  header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+    border-bottom:1px solid var(--border2);padding-bottom:10px;margin-bottom:12px}
+  header h1{font-size:15px;font-weight:600;letter-spacing:2px}
+  header .tag{font-size:10px;color:var(--dim);letter-spacing:1px}
+  header .live{margin-left:auto;font-size:10px;color:var(--cyan);
+    display:flex;align-items:center;gap:6px}
+  header .live::before{content:"";width:6px;height:6px;border-radius:50%;
+    background:var(--cyan);box-shadow:0 0 6px var(--cyan);animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .live.err::before{background:var(--bad);box-shadow:0 0 6px var(--bad)}
+  .live.err{color:var(--bad)}
+  .live.warn::before{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+  .live.warn{color:var(--warn)}
+
+  .layout{display:flex;gap:12px;align-items:flex-start}
+  .mapcol{flex:1 1 620px;min-width:0}
+  .side{flex:0 0 318px;display:flex;flex-direction:column;gap:10px}
+  @media(max-width:900px){.layout{flex-direction:column}.side{flex-basis:auto;width:100%}}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:3px}
+  .card h2{font-size:10px;letter-spacing:1.5px;color:var(--dim);font-weight:600;
+    padding:8px 11px;border-bottom:1px solid var(--border);text-transform:uppercase}
+
+  svg{display:block;width:100%;height:auto;background:
+    radial-gradient(ellipse at 42% 45%,#0d141d 0%,#080b11 100%)}
+  .edge-base{stroke:#1d2b3d;stroke-width:1.2;fill:none}
+  .edge-base.dc{stroke:#2a2440}
+  .edge-flow{fill:none;stroke-linecap:round}
+  .edge-hit{stroke:transparent;stroke-width:12;fill:none;cursor:pointer}
+  .node circle{cursor:pointer;transition:stroke-width .12s}
+  .node text{pointer-events:none;font-family:var(--mono)}
+  .node .code{font-size:9.5px;font-weight:600;fill:var(--text)}
+  .node .val{font-size:7px;fill:var(--dim)}
+  .node.sel circle{stroke:var(--cyan)!important;stroke-width:2.5}
+
+  .status{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;
+    background:var(--border);border:1px solid var(--border);border-radius:3px;
+    overflow:hidden;margin-top:10px}
+  .status div{background:var(--panel2);padding:8px 10px}
+  .status .k{font-size:8.5px;color:var(--dim);letter-spacing:1px}
+  .status .v{font-size:16px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+
+  .dq{margin-top:10px}
+  .dqrow{display:flex;flex-wrap:wrap;gap:8px;padding:8px 11px;font-size:9px;
+    color:var(--dim);align-items:center}
+  .dqrow .z{font-variant-numeric:tabular-nums}
+  .dqrow .sep{color:var(--border2)}
+
+  .hint{font-size:10.5px;color:var(--dim);padding:9px 11px;line-height:1.5}
+  .hint b{color:var(--text);font-weight:600}
+  .hint .dcw{color:var(--dc)}
+
+  .ctl{padding:10px 11px 12px}
+  .ctl .selname{font-size:13px;font-weight:600;letter-spacing:1px;margin-bottom:2px}
+  .ctl .selsub{font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.5}
+  .empty{color:var(--dim2);font-size:11px;padding:16px 11px;text-align:center;line-height:1.5}
+
+  .slrow{margin-bottom:9px}
+  .slrow .lab{display:flex;justify-content:space-between;font-size:10px;
+    margin-bottom:3px;color:var(--dim)}
+  .slrow .lab .amt{color:var(--text);font-variant-numeric:tabular-nums}
+  .slrow .lab .amt.up{color:var(--ok)} .slrow .lab .amt.dn{color:var(--bad)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:3px;border-radius:2px;
+    background:var(--border2);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+    border-radius:50%;background:var(--text);cursor:pointer;border:2px solid var(--panel)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;
+    background:var(--text);cursor:pointer;border:2px solid var(--panel)}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+  .btnrow{display:flex;flex-wrap:wrap;gap:5px;padding:9px 11px}
+  button{font-family:var(--mono);font-size:10px;letter-spacing:.5px;color:var(--text);
+    background:var(--panel2);border:1px solid var(--border2);border-radius:3px;
+    padding:6px 8px;cursor:pointer;transition:.12s;flex:1 1 auto}
+  button:hover{border-color:var(--cyan);color:var(--cyan)}
+  button.reset{color:var(--dim)}button.reset:hover{border-color:var(--bad);color:var(--bad)}
+
+  .flowlist{max-height:170px;overflow-y:auto;font-size:10px}
+  .flowlist .fr{display:flex;justify-content:space-between;padding:4px 11px;
+    border-bottom:1px solid var(--panel2)}
+  .flowlist .fr .rt{color:var(--dim);font-variant-numeric:tabular-nums}
+  .flowlist::-webkit-scrollbar{width:6px}
+  .flowlist::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+  .dctag{color:var(--dc);font-size:8.5px;letter-spacing:.5px}
+
+  .colorkey{display:flex;gap:11px;font-size:9px;color:var(--dim);padding:7px 11px;flex-wrap:wrap}
+  .freqgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px;background:var(--border)}
+  .freqchip{background:var(--panel2);padding:8px 10px}
+  .freqchip .fk{font-size:8px;color:var(--dim);letter-spacing:1px}
+  .freqchip .fv{font-size:17px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums}
+  .freqchip .fs{font-size:8.5px;margin-top:1px}
+  .mixbar{display:flex;height:16px;margin:9px 11px 4px;border-radius:2px;overflow:hidden;
+    border:1px solid var(--border2)}
+  .mixbar div{min-width:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>MERIDIAN&nbsp;GRID</h1>
+    <span class="tag">EU-VERBUNDNETZ · 4 SYNCHRONZONEN · DC-LASTFLUSS</span>
+    <span class="live" id="livebadge">MODELL-DEFAULTS</span>
+  </header>
+
+  <div class="layout">
+    <div class="mapcol">
+      <div class="card">
+        <svg id="map" viewBox="0 0 720 800" preserveAspectRatio="xMidYMid meet"
+             aria-label="Interaktive EU-Netzkarte"></svg>
+      </div>
+      <div class="status">
+        <div><div class="k">MAX. AUSLASTUNG</div><div class="v" id="s-util">–</div></div>
+        <div><div class="k">ÜBERLASTUNGEN</div><div class="v" id="s-over">–</div></div>
+        <div><div class="k">RINGFLUSS-INDEX</div><div class="v" id="s-loop">–</div></div>
+        <div><div class="k">DC-TRANSFER</div><div class="v" id="s-dc">–</div></div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <h2>Netzfrequenz je Synchronzone — simuliert</h2>
+        <div class="freqgrid" id="freqrow"></div>
+        <div class="hint" style="padding-top:4px">Quasistationäre Abweichung
+        nach Primärregelung: Δf = −ΔP/λ, je Insel. Jenseits 49,0 Hz würde
+        real Lastabwurf greifen — das Modell rechnet statisch weiter.</div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <h2>EU-Strommix — reagiert auf deine Eingriffe</h2>
+        <div class="mixbar" id="mixbar"></div>
+        <div class="flowlist" id="mixlegend" style="max-height:220px"></div>
+      </div>
+      <div class="card dq" id="dqcard" style="display:none">
+        <div class="dqrow" id="dqrow"></div>
+      </div>
+      <div class="card" id="deltacard" style="display:none;margin-top:10px">
+        <h2>Flussverschiebungen durch deine Eingriffe</h2>
+        <div class="flowlist" id="deltalist"></div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <h2>Höchstbelastete Verbindungen</h2>
+        <div class="flowlist" id="flowlist"></div>
+        <div class="colorkey">
+          <span><span class="dot" style="background:var(--ok)"></span>&lt;60% NTC</span>
+          <span><span class="dot" style="background:var(--warn)"></span>60–100%</span>
+          <span><span class="dot" style="background:var(--bad)"></span>&gt;100%</span>
+          <span><span class="dot" style="background:var(--dc)"></span>HVDC (Fahrplan)</span>
+          <span style="color:var(--dim2)">gestrichelter Rand = Modell-Default</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Szenarien</h2>
+        <div class="btnrow">
+          <button onclick="preset('fr')">FR −20 GW AKW</button>
+          <button onclick="preset('dewind')">DE +30 GW Wind</button>
+          <button onclick="preset('nordlink')">NordLink + NSL aus</button>
+          <button onclick="preset('iberia')">Iberien-Split</button>
+          <button onclick="preset('flaute')">Dunkelflaute</button>
+          <button onclick="preset('baltic')">Baltikum-Inselung</button>
+        </div>
+        <div class="btnrow" style="padding-top:0">
+          <button onclick="showN1()" style="border-color:var(--cyan);color:var(--cyan)">▶ N-1 STRESSTEST</button>
+          <button class="reset" onclick="resetAll()">■ ALLES ZURÜCKSETZEN</button>
+        </div>
+      </div>
+
+      <div class="card" id="n1card" style="display:none">
+        <h2 id="n1head">N-1-Stresstest</h2>
+        <div class="flowlist" id="n1list" style="max-height:230px"></div>
+        <div class="hint" style="padding-top:5px">Rechnet auf dem aktuellen
+        Zustand — inkl. deiner Schocks und der A11-Kalibrierung. Klick auf
+        einen Eintrag wendet den Ausfall an.</div>
+      </div>
+
+      <div class="card">
+        <h2 id="ctlhead">Manipulation</h2>
+        <div id="ctl"></div>
+      </div>
+
+      <div class="card">
+        <div class="hint">
+          <b>Knoten anklicken</b> → Erzeugung/Last verschieben.<br>
+          <b>AC-Leitung anklicken</b> → Kapazität drosseln/kappen. Der Fluss
+          folgt Kirchhoff — niemand steuert ihn.<br>
+          <b class="dcw">HVDC-Kabel anklicken</b> → Sollwert direkt stellen.
+          Das ist der "Draht mit Schalter": es fließt, was eingestellt ist —
+          Fahrplan statt Physik.
+          <div style="margin-top:7px;color:var(--dim2);font-size:9px">
+          Datenquelle: ENTSO-E Transparency Platform · Modell: zonaler
+          DC-Lastfluss, A11-kalibriert · keine Betriebsführungs-Daten</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════
+   MERIDIAN GRID v2 — EU-Verbundnetz (JS-Portierung von meridian_grid.py)
+   4 Synchronzonen, AC nach Kirchhoff, DC nach Sollwert.
+   ══════════════════════════════════════════════════════════════════════ */
+
+const CATS=["nuclear","coal","gas","hydro","wind","solar","biomass","other"];
+const CATCOL={nuclear:"#ff5c7a",coal:"#8a94a0",gas:"#ff9838",hydro:"#3aa0ff",
+  wind:"#3ddc84",solar:"#ffd23d",biomass:"#8fd14f",other:"#9aa7b5"};
+const CATLAB={nuclear:"Kernkraft",coal:"Kohle",gas:"Gas",hydro:"Wasser",
+  wind:"Wind",solar:"Solar",biomass:"Biomasse",other:"Sonstige"};
+const SYNCS=["CE","N","GB","IE"];
+
+/* === TOPOLOGIE (generiert aus meridian_grid.py – nicht von Hand ändern) === */
+const ZONES={"FR":{"name":"Frankreich","sync":"CE","lat":46.6,"lon":2.4,"load":58000,"gen":{"nuclear":45000,"coal":0,"gas":3000,"hydro":9000,"wind":4000,"solar":1000,"biomass":1000,"other":0}},"DE":{"name":"Deutschland","sync":"CE","lat":51.2,"lon":10.4,"load":62000,"gen":{"nuclear":0,"coal":14000,"gas":8000,"hydro":3000,"wind":28000,"solar":6000,"biomass":5000,"other":0}},"NL":{"name":"Niederlande","sync":"CE","lat":52.2,"lon":5.3,"load":13000,"gen":{"nuclear":0,"coal":1500,"gas":6000,"hydro":0,"wind":3500,"solar":1000,"biomass":0,"other":500}},"BE":{"name":"Belgien","sync":"CE","lat":50.6,"lon":4.6,"load":9500,"gen":{"nuclear":4000,"coal":0,"gas":2500,"hydro":0,"wind":1500,"solar":700,"biomass":0,"other":300}},"CH":{"name":"Schweiz","sync":"CE","lat":46.9,"lon":8.2,"load":7000,"gen":{"nuclear":2200,"coal":0,"gas":0,"hydro":5500,"wind":0,"solar":200,"biomass":0,"other":100}},"AT":{"name":"Österreich","sync":"CE","lat":47.6,"lon":14.1,"load":8000,"gen":{"nuclear":0,"coal":0,"gas":900,"hydro":6000,"wind":1000,"solar":200,"biomass":100,"other":0}},"IT":{"name":"Italien","sync":"CE","lat":43.5,"lon":11.5,"load":44000,"gen":{"nuclear":0,"coal":1000,"gas":21000,"hydro":7000,"wind":2500,"solar":6000,"biomass":0,"other":2500}},"SI":{"name":"Slowenien","sync":"CE","lat":46.1,"lon":14.8,"load":1600,"gen":{"nuclear":700,"coal":300,"gas":0,"hydro":600,"wind":0,"solar":0,"biomass":0,"other":100}},"HR":{"name":"Kroatien","sync":"CE","lat":45.3,"lon":15.9,"load":2200,"gen":{"nuclear":0,"coal":0,"gas":400,"hydro":1200,"wind":300,"solar":0,"biomass":0,"other":100}},"CZ":{"name":"Tschechien","sync":"CE","lat":49.8,"lon":15.5,"load":8000,"gen":{"nuclear":3800,"coal":3000,"gas":500,"hydro":0,"wind":0,"solar":800,"biomass":0,"other":700}},"SK":{"name":"Slowakei","sync":"CE","lat":48.7,"lon":19.7,"load":3200,"gen":{"nuclear":1900,"coal":0,"gas":500,"hydro":700,"wind":0,"solar":0,"biomass":0,"other":300}},"HU":{"name":"Ungarn","sync":"CE","lat":47.2,"lon":19.4,"load":5500,"gen":{"nuclear":1900,"coal":0,"gas":1200,"hydro":0,"wind":0,"solar":800,"biomass":0,"other":300}},"PL":{"name":"Polen","sync":"CE","lat":52.1,"lon":19.4,"load":22000,"gen":{"nuclear":0,"coal":16000,"gas":2000,"hydro":0,"wind":3000,"solar":1000,"biomass":0,"other":500}},"RO":{"name":"Rumänien","sync":"CE","lat":45.9,"lon":25.0,"load":7500,"gen":{"nuclear":1300,"coal":1200,"gas":1500,"hydro":2500,"wind":1000,"solar":500,"biomass":0,"other":0}},"BG":{"name":"Bulgarien","sync":"CE","lat":42.7,"lon":25.3,"load":4500,"gen":{"nuclear":2000,"coal":1500,"gas":300,"hydro":800,"wind":0,"solar":400,"biomass":0,"other":0}},"GR":{"name":"Griechenland","sync":"CE","lat":39.3,"lon":22.5,"load":6500,"gen":{"nuclear":0,"coal":300,"gas":3000,"hydro":1200,"wind":1500,"solar":1500,"biomass":0,"other":200}},"RS":{"name":"Serbien","sync":"CE","lat":44.2,"lon":20.9,"load":4500,"gen":{"nuclear":0,"coal":3000,"gas":300,"hydro":1400,"wind":0,"solar":0,"biomass":0,"other":0}},"BA":{"name":"Bosnien-H.","sync":"CE","lat":44.2,"lon":17.8,"load":1700,"gen":{"nuclear":0,"coal":1100,"gas":0,"hydro":700,"wind":0,"solar":0,"biomass":0,"other":0}},"ME":{"name":"Montenegro","sync":"CE","lat":42.7,"lon":19.3,"load":550,"gen":{"nuclear":0,"coal":220,"gas":0,"hydro":350,"wind":0,"solar":0,"biomass":0,"other":0}},"MK":{"name":"Nordmazedon.","sync":"CE","lat":41.6,"lon":21.7,"load":1100,"gen":{"nuclear":0,"coal":500,"gas":250,"hydro":250,"wind":0,"solar":0,"biomass":0,"other":150}},"AL":{"name":"Albanien","sync":"CE","lat":41.1,"lon":20.0,"load":1000,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":1050,"wind":0,"solar":0,"biomass":0,"other":0}},"ES":{"name":"Spanien","sync":"CE","lat":40.3,"lon":-3.7,"load":30000,"gen":{"nuclear":6000,"coal":0,"gas":6000,"hydro":4000,"wind":8000,"solar":6000,"biomass":0,"other":1000}},"PT":{"name":"Portugal","sync":"CE","lat":39.6,"lon":-8.0,"load":6000,"gen":{"nuclear":0,"coal":0,"gas":1500,"hydro":1500,"wind":2000,"solar":1000,"biomass":0,"other":200}},"DK1":{"name":"Dänemark W","sync":"CE","lat":56.0,"lon":9.2,"load":2400,"gen":{"nuclear":0,"coal":300,"gas":300,"hydro":0,"wind":2600,"solar":0,"biomass":500,"other":0}},"EE":{"name":"Estland","sync":"CE","lat":58.8,"lon":25.5,"load":950,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":0,"wind":250,"solar":150,"biomass":150,"other":500}},"LV":{"name":"Lettland","sync":"CE","lat":56.9,"lon":24.9,"load":800,"gen":{"nuclear":0,"coal":0,"gas":300,"hydro":500,"wind":100,"solar":0,"biomass":0,"other":0}},"LT":{"name":"Litauen","sync":"CE","lat":55.3,"lon":23.9,"load":1500,"gen":{"nuclear":0,"coal":0,"gas":200,"hydro":100,"wind":500,"solar":200,"biomass":0,"other":100}},"NO1":{"name":"Norwegen SO","sync":"N","lat":60.5,"lon":10.8,"load":4500,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":4200,"wind":100,"solar":0,"biomass":0,"other":0}},"NO2":{"name":"Norwegen SW","sync":"N","lat":58.5,"lon":7.5,"load":4200,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":6500,"wind":300,"solar":0,"biomass":0,"other":0}},"NO3":{"name":"Norwegen Mi","sync":"N","lat":63.5,"lon":10.0,"load":2600,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":2300,"wind":400,"solar":0,"biomass":0,"other":0}},"NO4":{"name":"Norwegen N","sync":"N","lat":68.5,"lon":17.0,"load":1900,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":2400,"wind":400,"solar":0,"biomass":0,"other":0}},"NO5":{"name":"Norwegen W","sync":"N","lat":60.9,"lon":6.2,"load":1900,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":2800,"wind":0,"solar":0,"biomass":0,"other":0}},"SE1":{"name":"Schweden N","sync":"N","lat":66.5,"lon":20.5,"load":1300,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":2800,"wind":700,"solar":0,"biomass":0,"other":0}},"SE2":{"name":"Schweden NMi","sync":"N","lat":62.8,"lon":15.5,"load":1500,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":3200,"wind":1300,"solar":0,"biomass":0,"other":0}},"SE3":{"name":"Schweden SMi","sync":"N","lat":59.5,"lon":15.5,"load":9500,"gen":{"nuclear":6100,"coal":0,"gas":0,"hydro":1200,"wind":1800,"solar":300,"biomass":0,"other":0}},"SE4":{"name":"Schweden S","sync":"N","lat":56.5,"lon":14.2,"load":2600,"gen":{"nuclear":0,"coal":0,"gas":0,"hydro":0,"wind":1000,"solar":200,"biomass":0,"other":400}},"FI":{"name":"Finnland","sync":"N","lat":62.5,"lon":26.0,"load":9500,"gen":{"nuclear":4400,"coal":0,"gas":0,"hydro":1500,"wind":2200,"solar":0,"biomass":1200,"other":400}},"DK2":{"name":"Dänemark O","sync":"N","lat":55.5,"lon":11.9,"load":1600,"gen":{"nuclear":0,"coal":200,"gas":0,"hydro":0,"wind":1000,"solar":0,"biomass":400,"other":0}},"GB":{"name":"Großbritan.","sync":"GB","lat":53.0,"lon":-1.8,"load":32000,"gen":{"nuclear":4500,"coal":0,"gas":14000,"hydro":0,"wind":9000,"solar":1500,"biomass":2500,"other":800}},"IE":{"name":"Irland (SEM)","sync":"IE","lat":53.3,"lon":-7.8,"load":5200,"gen":{"nuclear":0,"coal":200,"gas":2800,"hydro":0,"wind":1800,"solar":0,"biomass":0,"other":500}}};
+const LINES=[["FR","DE",12.0,4800,"AC",0.0,""],["FR","BE",9.0,4300,"AC",0.0,""],["FR","CH",10.0,3700,"AC",0.0,""],["FR","IT",8.0,4350,"AC",0.0,""],["FR","ES",8.0,2800,"AC",0.0,""],["DE","NL",11.0,5000,"AC",0.0,""],["DE","CH",9.0,4600,"AC",0.0,""],["DE","AT",14.0,5400,"AC",0.0,""],["DE","CZ",10.0,2100,"AC",0.0,""],["DE","PL",7.0,3000,"AC",0.0,""],["NL","BE",8.0,2400,"AC",0.0,""],["CH","AT",7.0,1700,"AC",0.0,""],["CH","IT",10.0,4240,"AC",0.0,""],["AT","IT",2.0,455,"AC",0.0,""],["AT","CZ",6.0,900,"AC",0.0,""],["AT","HU",7.0,1200,"AC",0.0,""],["AT","SI",6.0,950,"AC",0.0,""],["CZ","SK",8.0,1100,"AC",0.0,""],["CZ","PL",6.0,600,"AC",0.0,""],["SK","HU",7.0,1300,"AC",0.0,""],["SK","PL",4.0,500,"AC",0.0,""],["HU","SI",4.0,600,"AC",0.0,""],["HU","HR",5.0,900,"AC",0.0,""],["SI","HR",5.0,1200,"AC",0.0,""],["SI","IT",4.0,680,"AC",0.0,""],["ES","PT",9.0,3400,"AC",0.0,""],["DE","BE",0.0,1000,"DC",300,"ALEGrO"],["HU","RO",6.0,1300,"AC",0.0,""],["HU","RS",5.0,1200,"AC",0.0,""],["HR","RS",4.0,600,"AC",0.0,""],["HR","BA",5.0,1000,"AC",0.0,""],["RS","BA",4.0,700,"AC",0.0,""],["RS","RO",4.0,1000,"AC",0.0,""],["RS","BG",4.0,600,"AC",0.0,""],["RS","ME",3.0,600,"AC",0.0,""],["RS","MK",3.0,550,"AC",0.0,""],["RO","BG",5.0,1000,"AC",0.0,""],["BG","GR",4.0,800,"AC",0.0,""],["BG","MK",3.0,500,"AC",0.0,""],["GR","MK",3.0,550,"AC",0.0,""],["GR","AL",3.0,400,"AC",0.0,""],["ME","AL",3.0,500,"AC",0.0,""],["ME","BA",3.0,550,"AC",0.0,""],["IT","GR",0.0,500,"DC",-150,"GRITA"],["IT","ME",0.0,600,"DC",-250,"MONITA"],["DE","DK1",6.0,2500,"AC",0.0,""],["DK1","NL",0.0,700,"DC",200,"COBRAcable"],["PL","LT",4.0,500,"AC",0.0,""],["LT","LV",5.0,1300,"AC",0.0,""],["LV","EE",5.0,1100,"AC",0.0,""],["NO1","NO2",8.0,3500,"AC",0.0,""],["NO1","NO3",3.0,700,"AC",0.0,""],["NO1","NO5",7.0,3900,"AC",0.0,""],["NO2","NO5",3.0,600,"AC",0.0,""],["NO3","NO4",5.0,1200,"AC",0.0,""],["NO3","NO5",4.0,500,"AC",0.0,""],["NO1","SE3",6.0,2100,"AC",0.0,""],["NO3","SE2",4.0,1000,"AC",0.0,""],["NO4","SE1",4.0,700,"AC",0.0,""],["NO4","SE2",3.0,300,"AC",0.0,""],["SE1","SE2",8.0,3300,"AC",0.0,""],["SE2","SE3",9.0,7300,"AC",0.0,""],["SE3","SE4",8.0,5400,"AC",0.0,""],["SE1","FI",5.0,1500,"AC",0.0,""],["SE3","FI",4.0,1200,"AC",0.0,""],["SE4","DK2",6.0,1700,"AC",0.0,""],["DK1","DK2",0.0,600,"DC",200,"Storebælt"],["DK1","NO2",0.0,1700,"DC",-800,"Skagerrak"],["DK1","SE3",0.0,740,"DC",-300,"Konti-Skan"],["DE","DK2",0.0,600,"DC",-200,"Kontek"],["DE","SE4",0.0,615,"DC",-300,"Baltic Cable"],["PL","SE4",0.0,600,"DC",-200,"SwePol"],["DE","NO2",0.0,1400,"DC",-900,"NordLink"],["NL","NO2",0.0,700,"DC",-500,"NorNed"],["LT","SE4",0.0,700,"DC",-250,"NordBalt"],["EE","FI",0.0,1000,"DC",-350,"EstLink 1+2"],["FR","GB",0.0,4000,"DC",1500,"IFA/IFA2/ElecLink"],["BE","GB",0.0,1000,"DC",300,"Nemo Link"],["NL","GB",0.0,1000,"DC",300,"BritNed"],["DK1","GB",0.0,1400,"DC",500,"Viking Link"],["NO2","GB",0.0,1400,"DC",800,"North Sea Link"],["GB","IE",0.0,1000,"DC",300,"EWIC/Greenlink"],["GB","IE",0.0,500,"DC",150,"Moyle"]];
+/* === ENDE TOPOLOGIE === */
+
+const CODES=Object.keys(ZONES);
+CODES.forEach(c=>{const g={};CATS.forEach(k=>g[k]=ZONES[c].gen[k]||0);ZONES[c].gen=g;});
+// LINES: [a,b,suscept,ntc,kind,setpoint,label]
+const LKEY=l=>l[0]+"-"+l[1]+(l[6]?"|"+l[6]:"");
+
+/* ── Schock-State ── */
+let genShock={},loadShock={},lineDerate={},dcSet={};
+let selected={type:null,key:null};
+
+function lineFactor(l){
+  const k1=l[0]+"-"+l[1],k2=l[1]+"-"+l[0];
+  return (lineDerate[k1]!==undefined?lineDerate[k1]:
+          lineDerate[k2]!==undefined?lineDerate[k2]:1);
+}
+function effGenLoad(c){
+  const z=ZONES[c],g={...z.gen},gs=genShock[c]||{};
+  for(const k in gs)g[k]=Math.max(0,(g[k]||0)+gs[k]);
+  const load=z.load+(loadShock[c]||0);
+  let gsum=0;for(const k in g)gsum+=g[k];
+  return{gsum,load};
+}
+function dcFlow(l){
+  const d=lineFactor(l);
+  const sp=(dcSet[LKEY(l)]!==undefined?dcSet[LKEY(l)]:l[5])*d;
+  const lim=l[3]*d;
+  return Math.max(-lim,Math.min(lim,sp));
+}
+
+/* ── Multi-Synchronzonen-Lastfluss ── */
+function solve(){
+  const n=CODES.length,idx={};CODES.forEach((c,i)=>idx[c]=i);
+  const Praw=new Array(n).fill(0),cap=new Array(n).fill(0);
+  CODES.forEach(c=>{const{gsum,load}=effGenLoad(c);
+    Praw[idx[c]]=gsum-load+(ZONES[c].inj||0);cap[idx[c]]=gsum;});
+
+  // DC-Sollwerte als Injektionen
+  const dcF={};
+  LINES.forEach(l=>{if(l[4]!=="DC")return;
+    const f=dcFlow(l);dcF[LKEY(l)]=f;
+    Praw[idx[l[0]]]-=f;Praw[idx[l[1]]]+=f;});
+
+  // Inseln: Zusammenhangskomponenten über WIRKSAME AC-Kanten.
+  // Kappt man z.B. LitPol (PL-LT), zerfällt CE in zwei Inseln, und jede
+  // muss sich selbst ausregeln. DC-Kabel verhindern das nicht (nicht synchron).
+  const parent={};CODES.forEach(c=>parent[c]=c);
+  const find=x=>{while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;};
+  LINES.forEach(l=>{if(l[4]!=="AC")return;
+    if(l[2]*lineFactor(l)<1e-9)return;
+    const ra=find(l[0]),rb=find(l[1]);if(ra!==rb)parent[ra]=rb;});
+  const islMap={};CODES.forEach(c=>{const r=find(c);
+    (islMap[r]=islMap[r]||[]).push(c);});
+  const islands=Object.values(islMap);
+
+  // verteilter Slack JE INSEL
+  const P=Praw.slice(),reg=new Array(n).fill(0);
+  islands.forEach(isl=>{
+    const ids=isl.map(c=>idx[c]);
+    let imb=0,cs=0;ids.forEach(i=>{imb+=Praw[i];cs+=cap[i];});
+    ids.forEach(i=>{const a=cs?cap[i]/cs:1/ids.length;
+      reg[i]=-a*imb;P[i]+=reg[i];});
+  });
+
+  // AC-Lastfluss je Insel
+  const theta=new Array(n).fill(0);
+  islands.forEach(isl=>{
+    if(isl.length<2)return;
+    const mi={};isl.forEach((c,k)=>mi[c]=k);
+    const m=isl.length;
+    const B=Array.from({length:m},()=>new Array(m).fill(0));
+    LINES.forEach(l=>{if(l[4]!=="AC")return;
+      if(!(l[0]in mi)||!(l[1]in mi))return;
+      const b=l[2]*lineFactor(l);if(b<1e-9)return;
+      const i=mi[l[0]],j=mi[l[1]];
+      B[i][i]+=b;B[j][j]+=b;B[i][j]-=b;B[j][i]-=b;});
+    const keep=[...Array(m).keys()].slice(1);
+    const A=keep.map(gi=>keep.map(gj=>B[gi][gj]));
+    const rhs=keep.map(gi=>P[idx[isl[gi]]]);
+    const x=gauss(A,rhs);
+    keep.forEach((gi,ii)=>theta[idx[isl[gi]]]=x[ii]);
+  });
+
+  const flows=LINES.map(l=>{
+    let f;
+    if(l[4]==="AC")f=l[2]*lineFactor(l)*(theta[idx[l[0]]]-theta[idx[l[1]]]);
+    else f=dcF[LKEY(l)];
+    // Drosselung skaliert die NTC mit: -50% = ein Stromkreis weg,
+    // der Rest muss den Fluss auf halbem Limit tragen.
+    const effNtc=l[3]*lineFactor(l);
+    const util=effNtc>1e-9?Math.abs(f)/effNtc:0;
+    return{a:l[0],b:l[1],kind:l[4],label:l[6]||null,ntc:effNtc,ntcBase:l[3],
+      flow:f,abs:Math.abs(f),from:f>=0?l[0]:l[1],to:f>=0?l[1]:l[0],
+      util,over:util>1.001,cut:effNtc<1e-9};
+  });
+  const zones={};
+  CODES.forEach(c=>{const{gsum,load}=effGenLoad(c);const phys=P[idx[c]];
+    zones[c]={gen:gsum,load,net:gsum-load,phys,reg:reg[idx[c]],
+      pos:phys>50?"EXP":phys<-50?"IMP":"BAL"};});
+  let loop=0,dcTot=0;
+  flows.forEach(f=>{loop+=f.abs;if(f.kind==="DC")dcTot+=f.abs;});
+  return{flows,zones,islands,nIslands:islands.length,
+    maxUtil:Math.max(...flows.map(f=>f.util),0),
+    nOver:flows.filter(f=>f.over).length,loop,dcTot};
+}
+function gauss(A,b){
+  const n=b.length;if(!n)return[];
+  const M=A.map((r,i)=>[...r,b[i]]);
+  for(let col=0;col<n;col++){
+    let p=col;for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[p][col]))p=r;
+    [M[col],M[p]]=[M[p],M[col]];
+    const pv=M[col][col]||1e-9;
+    for(let r=0;r<n;r++){if(r===col)continue;const f=M[r][col]/pv;
+      for(let k=col;k<=n;k++)M[r][k]-=f*M[col][k];}
+  }
+  return M.map((r,i)=>r[n]/(r[i]||1e-9));
+}
+
+/* ── Live-Anbindung ── */
+let LIVE={on:false,meta:{},quality:null,ext:0,nLive:0,total:0,ts:null,
+  target:null,fill:null,cal:null};
+
+function srcColor(s){return s==="live"?"var(--ok)":s==="stale"?"var(--warn)":"var(--dim2)";}
+
+function updateLiveBadge(){
+  const b=document.getElementById("livebadge");
+  b.className="live";
+  if(!LIVE.on){b.textContent="MODELL-DEFAULTS";return;}
+  const q=LIVE.quality;
+  if(q==="poor")b.classList.add("err");else if(q==="partial")b.classList.add("warn");
+  b.textContent=`ENTSO-E LIVE · ${LIVE.nLive}/${LIVE.total} ZONEN`+
+    (LIVE.cal?` · A11-KALIBRIERT`:``);
+  const card=document.getElementById("dqcard"),row=document.getElementById("dqrow");
+  card.style.display="block";
+  const qlab={ok:"belastbar",partial:"eingeschränkt",poor:"unzureichend"}[q]||q;
+  let h=`<span style="color:${q==='ok'?'var(--ok)':q==='partial'?'var(--warn)':'var(--bad)'}">`+
+        `DATENLAGE: ${qlab.toUpperCase()}</span><span class="sep">│</span>`;
+  if(LIVE.target){
+    const t=new Date(LIVE.target);
+    h+=`<span>Netzschnitt ${String(t.getUTCHours()).padStart(2,"0")}:`+
+       `${String(t.getUTCMinutes()).padStart(2,"0")} UTC</span><span class="sep">│</span>`;
+  }
+  if(LIVE.cal){
+    let calTxt=`A11: ${LIVE.cal.n_measured} Grenzen, ${LIVE.cal.n_scaled} gefittet`;
+    if(LIVE.cal.mean_abs_error_mw!=null)
+      calTxt+=`, Ø-Fehler ${LIVE.cal.mean_abs_error_mw} MW`;
+    if(LIVE.cal.n_ntc_raised)
+      calTxt+=`, ${LIVE.cal.n_ntc_raised} NTC angehoben`;
+    if(LIVE.cal.n_unmeasured)
+      calTxt+=` · ${LIVE.cal.n_unmeasured} ohne Messung`;
+    if(LIVE.cal.unpinned_zones&&LIVE.cal.unpinned_zones.length&&LIVE.cal.unpinned_zones.length<=10)
+      calTxt+=` · ungepinnt: ${LIVE.cal.unpinned_zones.join(" ")}`;
+    h+=`<span style="color:var(--cyan)" title="Grenzen ohne A11 (v.a. GB-Kabel) `+
+       `gehen mit Sollwert-Annahme in die Bilanz">${calTxt}</span><span class="sep">│</span>`;
+  }
+  h+=`<span>offene Bilanz ${(LIVE.ext/1000).toFixed(1)} GW</span><span class="sep">│</span>`;
+  h+=CODES.map(c=>{const m=LIVE.meta[c]||{source:"default"};
+    const tip=m.source==="default"
+      ?"Modell-Default"+(m.reason?": "+m.reason:"")
+      :m.source+(m.fill_min?`, ${m.fill_min} min vorgetragen`:", aktuell");
+    return `<span class="z" style="color:${srcColor(m.source)}" title="${tip}">${c}</span>`;
+  }).join(" ");
+  row.innerHTML=h;
+}
+
+async function loadLive(){
+  if(!window.GRID_LIVE_ENDPOINT)return;
+  const b=document.getElementById("livebadge");
+  try{
+    // Cache-Buster: GitHub Pages cached statische Dateien ~10 Min
+    const u=window.GRID_LIVE_ENDPOINT+(window.GRID_LIVE_ENDPOINT.includes("?")?"&":"?")+"t="+Date.now();
+    const r=await fetch(u);
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const d=await r.json();
+    if(d.zone_input){
+      for(const c in d.zone_input){
+        if(!ZONES[c])continue;
+        const g={};CATS.forEach(k=>g[k]=d.zone_input[c].gen[k]||0);
+        ZONES[c].gen=g;
+        ZONES[c].load=d.zone_input[c].load;
+      }
+    }
+    // Kalibrierte DC-Sollwerte und Suszeptanz-Faktoren des Servers übernehmen
+    if(d.dc_setpoints){
+      LINES.forEach(l=>{if(l[4]!=="DC")return;
+        const k=l[0]+"-"+l[1]+(l[6]?" ["+l[6]+"]":"");
+        if(k in d.dc_setpoints)l[5]=d.dc_setpoints[k];});
+    }
+    if(d.suscept_scale){
+      LINES.forEach(l=>{if(l[4]!=="AC")return;
+        const k=l[0]+"-"+l[1];
+        if(k in d.suscept_scale)l[2]=l[2]*d.suscept_scale[k]/(l._sc||1),l._sc=d.suscept_scale[k];});
+    }
+    if(d.zone_injection){
+      for(const c in d.zone_injection){
+        if(ZONES[c])ZONES[c].inj=d.zone_injection[c];
+      }
+    }
+    if(d.ntc_override){
+      LINES.forEach(l=>{
+        const k=l[0]+"-"+l[1]+(l[6]?" ["+l[6]+"]":"");
+        if(k in d.ntc_override){
+          l._ntc0=l._ntc0||l[3];        // Annahme merken
+          l[3]=d.ntc_override[k];       // empirisch belegtes Limit
+        }
+      });
+    }
+    const L=d.live||{};
+    LIVE={on:true,meta:L.zones_meta||{},quality:L.quality,
+      ext:L.external_balance_mw||0,nLive:L.zones_live||0,
+      total:L.zones_total||CODES.length,ts:L.ts_utc,
+      target:L.target_ts||null,fill:L.max_fill_min,cal:L.calibration||null};
+    refreshBaseline();   // neue Datenbasis = neue Vergleichsbasis
+    updateLiveBadge();buildControls();recompute();
+    if(LIVE.nLive===0)setTimeout(loadLive,15000);
+  }catch(e){
+    LIVE.on=false;
+    b.className="live err";
+    b.textContent="LIVE NICHT ERREICHBAR — MODELL-DEFAULTS";
+    console.warn("Live-Daten nicht geladen:",e.message);
+    setTimeout(loadLive,30000);
+  }
+}
+
+/* ── Projektion (ganz Europa: Lissabon bis Nordkap) ── */
+const VW=720,VH=800,PAD=40;
+const LON=[-12,30],LAT=[36,71.5];
+function px(lon){return PAD+(lon-LON[0])/(LON[1]-LON[0])*(VW-2*PAD);}
+function py(lat){return PAD+(LAT[1]-lat)/(LAT[1]-LAT[0])*(VH-2*PAD);}
+function nodeR(c){return 8+Math.sqrt(ZONES[c].load)/22;}
+
+/* ── Rendering ── */
+const svg=document.getElementById("map");
+const SVGNS="http://www.w3.org/2000/svg";
+let edgeEls={},nodeEls={};
+
+function buildSVG(){
+  svg.innerHTML="";
+  const gE=document.createElementNS(SVGNS,"g");svg.appendChild(gE);
+  LINES.forEach(l=>{
+    const x1=px(ZONES[l[0]].lon),y1=py(ZONES[l[0]].lat),
+          x2=px(ZONES[l[1]].lon),y2=py(ZONES[l[1]].lat);
+    const base=document.createElementNS(SVGNS,"line");
+    base.setAttribute("class","edge-base"+(l[4]==="DC"?" dc":""));
+    base.setAttribute("x1",x1);base.setAttribute("y1",y1);
+    base.setAttribute("x2",x2);base.setAttribute("y2",y2);
+    const flow=document.createElementNS(SVGNS,"line");
+    flow.setAttribute("class","edge-flow");
+    const hit=document.createElementNS(SVGNS,"line");
+    hit.setAttribute("class","edge-hit");
+    hit.setAttribute("x1",x1);hit.setAttribute("y1",y1);
+    hit.setAttribute("x2",x2);hit.setAttribute("y2",y2);
+    hit.addEventListener("click",()=>selectLine(l));
+    gE.appendChild(base);gE.appendChild(flow);gE.appendChild(hit);
+    edgeEls[LKEY(l)]={flow};
+  });
+  const gN=document.createElementNS(SVGNS,"g");svg.appendChild(gN);
+  CODES.forEach(c=>{
+    const x=px(ZONES[c].lon),y=py(ZONES[c].lat),r=nodeR(c);
+    const g=document.createElementNS(SVGNS,"g");g.setAttribute("class","node");
+    g.addEventListener("click",()=>selectZone(c));
+    const circ=document.createElementNS(SVGNS,"circle");
+    circ.setAttribute("cx",x);circ.setAttribute("cy",y);circ.setAttribute("r",r);
+    circ.setAttribute("stroke-width","1.4");
+    const t1=document.createElementNS(SVGNS,"text");t1.setAttribute("class","code");
+    t1.setAttribute("x",x);t1.setAttribute("y",y+1.5);t1.setAttribute("text-anchor","middle");
+    t1.textContent=c;
+    const t2=document.createElementNS(SVGNS,"text");t2.setAttribute("class","val");
+    t2.setAttribute("x",x);t2.setAttribute("y",y+r+8);t2.setAttribute("text-anchor","middle");
+    g.appendChild(circ);g.appendChild(t1);g.appendChild(t2);gN.appendChild(g);
+    nodeEls[c]={g,circ,t2,x,y,r};
+  });
+}
+
+function utilColor(f){
+  if(f.kind==="DC")return f.over?"var(--bad)":"var(--dc)";
+  return f.util>1?"var(--bad)":f.util>0.6?"var(--warn)":"var(--ok)";
+}
+function netColor(p){
+  if(Math.abs(p)<50)return "#2a3646";
+  const t=Math.min(1,Math.abs(p)/10000);
+  return p>0?`rgba(61,220,132,${0.22+0.55*t})`:`rgba(255,77,77,${0.22+0.55*t})`;
+}
+
+let anim=0;
+function render(res){
+  LINES.forEach(l=>{
+    const f=res.flows.find(x=>x.a===l[0]&&x.b===l[1]&&x.label===(l[6]||null));
+    const e=edgeEls[LKEY(l)];
+    const w=1.2+Math.min(1.6,f.util)*5;
+    const A=nodeEls[f.from],Bn=nodeEls[f.to];
+    e.flow.setAttribute("x1",A.x);e.flow.setAttribute("y1",A.y);
+    e.flow.setAttribute("x2",Bn.x);e.flow.setAttribute("y2",Bn.y);
+    if(f.cut){
+      // gekappte Leitung: statisch rot gepunktet – der fehlende Pfad soll
+      // sichtbar bleiben, nicht verschwinden
+      e.flow.setAttribute("stroke","var(--bad)");
+      e.flow.setAttribute("stroke-width","1.6");
+      e.flow.setAttribute("stroke-dasharray","1 4");
+      e.flow.setAttribute("opacity","0.7");
+      e.flow.dataset.speed=0;
+    }else{
+      e.flow.setAttribute("stroke",utilColor(f));
+      e.flow.setAttribute("stroke-width",w.toFixed(1));
+      // AC: Punktlinie (Physik "fließt"); DC: lange Striche (geschalteter Pfad)
+      e.flow.setAttribute("stroke-dasharray",f.kind==="DC"?"7 5":"2 6");
+      e.flow.setAttribute("opacity",f.abs<60?0.12:0.95);
+      e.flow.dataset.speed=Math.min(3,0.4+f.util*2.2);
+    }
+  });
+  CODES.forEach(c=>{
+    const z=res.zones[c],el=nodeEls[c];
+    el.circ.setAttribute("fill",netColor(z.phys));
+    el.circ.setAttribute("stroke",z.pos==="EXP"?"var(--ok)":z.pos==="IMP"?"var(--bad)":"#33465c");
+    const src=(LIVE.on&&LIVE.meta[c])?LIVE.meta[c].source:(LIVE.on?"default":null);
+    el.circ.setAttribute("stroke-dasharray",src==="default"?"2 2":"none");
+    el.circ.setAttribute("stroke-opacity",src==="stale"?"0.5":"1");
+    const gw=z.phys/1000;
+    el.t2.textContent=(gw>=0?"+":"")+gw.toFixed(1);
+    el.t2.setAttribute("fill",z.pos==="EXP"?"var(--ok)":z.pos==="IMP"?"var(--bad)":"var(--dim)");
+    el.g.classList.toggle("sel",selected.type==="zone"&&selected.key===c);
+  });
+  document.getElementById("s-util").textContent=Math.round(res.maxUtil*100)+"%";
+  document.getElementById("s-util").style.color=
+    res.maxUtil>1?"var(--bad)":res.maxUtil>0.6?"var(--warn)":"var(--ok)";
+  document.getElementById("s-over").textContent=res.nOver;
+  document.getElementById("s-over").style.color=res.nOver?"var(--bad)":"var(--ok)";
+  document.getElementById("s-loop").textContent=(res.loop/1000).toFixed(1);
+  const dcEl=document.getElementById("s-dc");
+  if(res.nIslands>4){
+    dcEl.textContent=res.nIslands+" INSELN";
+    dcEl.style.color="var(--bad)";
+    dcEl.parentElement.querySelector(".k").textContent="NETZ AUFGETRENNT";
+  }else{
+    dcEl.textContent=(res.dcTot/1000).toFixed(1)+" GW";
+    dcEl.style.color="";
+    dcEl.parentElement.querySelector(".k").textContent="DC-TRANSFER";
+  }
+  const fl=[...res.flows].sort((a,b)=>b.util-a.util).slice(0,10);
+  document.getElementById("flowlist").innerHTML=fl.map(f=>{
+    const c=utilColor(f);
+    const tag=f.kind==="DC"?` <span class="dctag">DC${f.label?" · "+f.label:""}</span>`:"";
+    return `<div class="fr"><span><span class="dot" style="background:${c}"></span>`+
+      `${f.from} → ${f.to}${tag}</span>`+
+      `<span class="rt">${Math.round(f.abs)} MW · ${Math.round(f.util*100)}%</span></div>`;
+  }).join("");
+}
+
+function tick(){
+  anim+=1;
+  for(const k in edgeEls){
+    const fl=edgeEls[k].flow,sp=parseFloat(fl.dataset.speed||0);
+    fl.setAttribute("stroke-dashoffset",-(anim*sp)%12);
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ── Netzfrequenz (quasistationär nach Primärregelung) ──
+   Δf = −ΔP_regel/λ je INSEL. λ_CE = 15 GW/Hz (3 GW FCR für 200 mHz –
+   das ENTSO-E-Auslegungskriterium); Inseln erben λ anteilig an ihrer
+   Erzeugung. Referenz = ungestörter Zustand (BASELINE), damit die
+   Daten-Restbilanz nicht als Frequenzabweichung erscheint. */
+const FREQ_LAMBDA={CE:15000,N:6000,GB:2500,IE:450};
+function freqStatus(dev){
+  if(dev>=1500)return["collapse","KOLLAPS – Erzeugerschutz (≥51,5 Hz)"];
+  if(dev>=200)return["emergency","ÜBERFREQUENZ – PV-Abschaltungen (≥50,2 Hz)"];
+  if(dev>=100)return["alert","ERHÖHT"];
+  if(dev>-100)return["normal","NORMAL"];
+  if(dev>-200)return["alert","ABGESENKT"];
+  if(dev>-1000)return["emergency","KRITISCH – FCR-Grenze (≤49,8 Hz)"];
+  if(dev>-2500)return["emergency","LASTABWURF – UFLS (≤49,0 Hz)"];
+  return["collapse","SYSTEMKOLLAPS (≤47,5 Hz)"];
+}
+function computeFrequencies(res){
+  const syncCap={},islCap=isl=>isl.reduce((s,c)=>s+res.zones[c].gen,0);
+  CODES.forEach(c=>{syncCap[ZONES[c].sync]=(syncCap[ZONES[c].sync]||0)+res.zones[c].gen;});
+  const out=res.islands.map(isl=>{
+    const sync=ZONES[isl[0]].sync;
+    const lam=FREQ_LAMBDA[sync]*Math.max(0.02,islCap(isl)/Math.max(1,syncCap[sync]));
+    let dreg=0;
+    isl.forEach(c=>{const ref=BASELINE?BASELINE.zones[c].reg:0;
+      dreg+=res.zones[c].reg-ref;});
+    const hz=50-dreg/lam,dev=(hz-50)*1000;
+    const[code,label]=freqStatus(dev);
+    return{sync,members:isl.slice().sort(),lam,hz:Math.min(52,Math.max(47,hz)),
+      dev,code,label,isIsland:true};
+  });
+  const best={};
+  out.forEach(f=>{if(!best[f.sync]||f.members.length>best[f.sync].members.length)best[f.sync]=f;});
+  Object.values(best).forEach(f=>f.isIsland=false);
+  out.sort((a,b)=>a.sync<b.sync?-1:a.sync>b.sync?1:(a.isIsland?1:-1));
+  return out;
+}
+const FREQCOL={normal:"var(--ok)",alert:"var(--warn)",emergency:"var(--bad)",collapse:"var(--bad)"};
+function renderFrequencies(res){
+  const row=document.getElementById("freqrow");
+  const fr=computeFrequencies(res);
+  row.innerHTML=fr.map(f=>{
+    const name=f.isIsland?`INSEL ${f.members.join("+")}`:
+      {CE:"KONTINENTALEUROPA",N:"NORDIC",GB:"GROSSBRITANNIEN",IE:"IRLAND"}[f.sync];
+    const col=FREQCOL[f.code];
+    const glow=f.code==="collapse"||f.code==="emergency"?
+      `;text-shadow:0 0 8px ${col}`:"";
+    return `<div class="freqchip" title="${f.label} · λ = ${(f.lam/1000).toFixed(1)} GW/Hz">`+
+      `<div class="fk">${name}</div>`+
+      `<div class="fv" style="color:${col}${glow}">${f.hz.toFixed(3)} Hz</div>`+
+      `<div class="fs" style="color:${col}">${f.dev>=0?"+":""}${Math.round(f.dev)} mHz · ${f.label.split(" –")[0]}</div></div>`;
+  }).join("");
+}
+
+/* ── EU-Strommix (reagiert auf Eingriffe) ── */
+let MIXBASE=null;
+function mixNow(){
+  const m={};CATS.forEach(k=>m[k]=0);
+  let load=0,unmod=0;
+  CODES.forEach(c=>{
+    const z=ZONES[c],gs=genShock[c]||{};
+    CATS.forEach(k=>m[k]+=Math.max(0,(z.gen[k]||0)+(gs[k]||0)));
+    load+=z.load+(loadShock[c]||0);
+    unmod+=z.inj||0;
+  });
+  return{m,load,unmod,total:CATS.reduce((s,k)=>s+m[k],0)};
+}
+function renderMix(){
+  const cur=mixNow(),base=MIXBASE||cur;
+  const bar=document.getElementById("mixbar");
+  const leg=document.getElementById("mixlegend");
+  const tot=cur.total+Math.max(0,cur.unmod);
+  bar.innerHTML=CATS.filter(k=>cur.m[k]>0).map(k=>
+    `<div style="flex:${cur.m[k]};background:${CATCOL[k]}" title="${CATLAB[k]}"></div>`
+  ).join("")+(cur.unmod>0?`<div style="flex:${cur.unmod};background:#3a4656" title="nicht erfasst"></div>`:"");
+  let rows=CATS.filter(k=>cur.m[k]>0||base.m[k]>0).map(k=>{
+    const d=cur.m[k]-base.m[k];
+    const dTxt=Math.abs(d)>=100?` <span style="color:${d>0?"var(--ok)":"var(--bad)"}">${d>0?"+":""}${(d/1000).toFixed(1)}</span>`:"";
+    return `<div class="fr"><span><span class="dot" style="background:${CATCOL[k]}"></span>${CATLAB[k]}</span>`+
+      `<span class="rt">${(cur.m[k]/1000).toFixed(1)} GW · ${Math.round(cur.m[k]/tot*100)}%${dTxt}</span></div>`;
+  }).join("");
+  if(Math.abs(cur.unmod)>=100)
+    rows+=`<div class="fr"><span><span class="dot" style="background:#3a4656"></span>nicht erfasst (Kleinanlagen/Extern)</span>`+
+      `<span class="rt">${(cur.unmod/1000).toFixed(1)} GW</span></div>`;
+  rows+=`<div class="fr" style="border-top:1px solid var(--border2)"><span>Σ Erzeugung / Σ Last</span>`+
+    `<span class="rt">${(tot/1000).toFixed(0)} / ${(cur.load/1000).toFixed(0)} GW</span></div>`;
+  leg.innerHTML=rows;
+}
+
+/* ── Baseline & Delta-Ansicht ──
+   In einem vermaschten Netz verteilt sich jeder Eingriff über viele Kanten –
+   einzeln oft nur ±100–300 MW, in Farbe/Strichstärke kaum sichtbar (das ist
+   das N-1-Prinzip: Netze sind so GEBAUT, dass einzelne Ausfälle langweilig
+   bleiben). Die Delta-Ansicht macht die Umverteilung trotzdem sichtbar:
+   Fluss jetzt vs. Fluss ohne Eingriffe, auf identischer Datenbasis. */
+let BASELINE=null;
+function shocksActive(){
+  return Object.keys(genShock).length>0||Object.keys(loadShock).length>0||
+         Object.keys(lineDerate).length>0||Object.keys(dcSet).length>0;
+}
+function solveBaseline(){
+  const g=genShock,ls=loadShock,ld=lineDerate,dc=dcSet;
+  genShock={};loadShock={};lineDerate={};dcSet={};
+  const r=solve();
+  genShock=g;loadShock=ls;lineDerate=ld;dcSet=dc;
+  return r;
+}
+function refreshBaseline(){BASELINE=solveBaseline();MIXBASE=mixNow_unshocked();}
+function mixNow_unshocked(){const g=genShock,ls=loadShock;genShock={};loadShock={};const m=mixNow();genShock=g;loadShock=ls;return m;}
+
+function renderDeltas(res){
+  const card=document.getElementById("deltacard");
+  const list=document.getElementById("deltalist");
+  if(!shocksActive()||!BASELINE){card.style.display="none";return;}
+  card.style.display="block";
+  const bmap={};BASELINE.flows.forEach(f=>bmap[f.a+"|"+f.b+"|"+(f.label||"")]=f.flow);
+  const rows=res.flows
+    .map(f=>({f,d:f.flow-(bmap[f.a+"|"+f.b+"|"+(f.label||"")]||0)}))
+    .filter(x=>Math.abs(x.d)>=80)
+    .sort((a,b)=>Math.abs(b.d)-Math.abs(a.d))
+    .slice(0,9);
+  if(!rows.length){
+    list.innerHTML='<div class="fr"><span style="color:var(--dim2)">'+
+      'Keine nennenswerte Umverteilung (&lt;80 MW je Kante)</span></div>';
+    return;
+  }
+  list.innerHTML=rows.map(x=>{
+    const b0=bmap[x.f.a+"|"+x.f.b+"|"+(x.f.label||"")]||0;
+    const col=x.d>0?"var(--ok)":"var(--bad)";
+    const tag=x.f.kind==="DC"?' <span class="dctag">DC</span>':"";
+    const cut=x.f.cut?' <span style="color:var(--bad)">✂ getrennt</span>':"";
+    return `<div class="fr"><span>${x.f.a} ↔ ${x.f.b}${tag}${cut}</span>`+
+      `<span class="rt">${Math.round(b0)} → ${Math.round(x.f.flow)} MW `+
+      `<span style="color:${col}">Δ ${x.d>0?"+":""}${Math.round(x.d)}</span></span></div>`;
+  }).join("");
+}
+
+/* ── Interaktion ── */
+function recompute(){const r=solve();render(r);renderDeltas(r);renderFrequencies(r);renderMix();}
+function selectZone(c){selected={type:"zone",key:c};buildControls();recompute();}
+function selectLine(l){selected={type:"line",key:l};buildControls();recompute();}
+
+function buildControls(){
+  const ctl=document.getElementById("ctl");
+  const head=document.getElementById("ctlhead");
+  if(selected.type==="zone"){
+    const c=selected.key,z=ZONES[c],res=solve(),zr=res.zones[c];
+    head.textContent="Zone · "+c+" ("+z.sync+")";
+    let h=`<div class="ctl"><div class="selname">${z.name}</div>`+
+      `<div class="selsub">Synchronzone ${z.sync} · `+
+      `Fahrplan ${(zr.net/1000>=0?"+":"")}${(zr.net/1000).toFixed(1)} GW · `+
+      `physisch ${(zr.phys/1000>=0?"+":"")}${(zr.phys/1000).toFixed(1)} GW (${zr.pos})`+
+      `${Math.abs(zr.reg)>50?` · Regelbeitrag ${(zr.reg/1000>=0?"+":"")}${(zr.reg/1000).toFixed(1)} GW`:""}</div>`;
+    CATS.filter(k=>z.gen[k]>0).forEach(k=>{
+      const base=z.gen[k],d=(genShock[c]&&genShock[c][k])||0;
+      const rng=Math.max(base,base*1.5,5000);
+      h+=slider(`gen-${c}-${k}`,
+        `<span class="dot" style="background:${CATCOL[k]}"></span>${CATLAB[k]}`,
+        -Math.round(base),Math.round(rng),d,`onGen('${c}','${k}',this.value)`);
+    });
+    const dl=loadShock[c]||0;
+    h+=slider(`load-${c}`,`Last`,-Math.round(z.load*0.5),Math.round(z.load*0.5),dl,
+      `onLoad('${c}',this.value)`);
+    h+="</div>";
+    ctl.innerHTML=h;
+  }else if(selected.type==="line"){
+    const l=selected.key;
+    const f=solve().flows.find(x=>x.a===l[0]&&x.b===l[1]&&x.label===(l[6]||null));
+    if(l[4]==="DC"){
+      head.textContent="HVDC · "+l[0]+"–"+l[1];
+      const cur=dcSet[LKEY(l)]!==undefined?dcSet[LKEY(l)]:l[5];
+      let h=`<div class="ctl"><div class="selname">${l[6]||l[0]+"–"+l[1]}</div>`+
+        `<div class="selsub"><span class="dctag">HVDC — Fahrplan statt Physik</span><br>`+
+        `Sollwert ${cur>=0?"+":""}${Math.round(cur)} MW (+ = ${l[0]}→${l[1]}) · `+
+        `Limit ±${l[3]} MW</div>`;
+      h+=`<div class="slrow"><div class="lab"><span>Sollwert</span>`+
+         `<span class="amt" id="amt-dc">${cur>=0?"+":""}${Math.round(cur)} MW</span></div>`+
+         `<input type="range" min="${-l[3]}" max="${l[3]}" step="50" value="${Math.round(cur)}" `+
+         `oninput="onDC('${LKEY(l)}',this.value)"></div>`;
+      h+=`<div class="btnrow" style="padding:4px 0 0">`+
+         `<button onclick="onDC('${LKEY(l)}',0)">KABEL AUF 0</button>`+
+         `<button onclick="onDC('${LKEY(l)}',${l[3]})">VOLL ${l[0]}→${l[1]}</button>`+
+         `<button onclick="onDC('${LKEY(l)}',${-l[3]})">VOLL ${l[1]}→${l[0]}</button></div></div>`;
+      ctl.innerHTML=h;
+    }else{
+      head.textContent="AC-Leitung · "+l[0]+"–"+l[1];
+      const der=lineDerate[l[0]+"-"+l[1]]!==undefined?lineDerate[l[0]+"-"+l[1]]:1;
+      let delta="";
+      if(BASELINE){
+        const b=BASELINE.flows.find(x=>x.a===l[0]&&x.b===l[1]&&x.label===(l[6]||null));
+        if(b&&Math.abs(f.flow-b.flow)>20)
+          delta=`<br>Δ zum ungestörten Netz: ${f.flow-b.flow>0?"+":""}${Math.round(f.flow-b.flow)} MW`;
+      }
+      let h=`<div class="ctl"><div class="selname">${l[0]} ↔ ${l[1]}</div>`+
+        `<div class="selsub">AC — Fluss folgt Kirchhoff<br>`+
+        `aktuell ${f.from}→${f.to} ${Math.round(f.abs)} MW · `+
+        `<span id="line-util">${Math.round(f.util*100)}% von ${Math.round(f.ntc)} MW`+
+        `${der<1?` (gedrosselt, voll ${f.ntcBase})`:""}</span>${delta}</div>`;
+      h+=`<div class="slrow"><div class="lab"><span>Verfügbare Kapazität</span>`+
+         `<span class="amt" id="amt-line">${Math.round(der*100)}%</span></div>`+
+         `<input type="range" min="0" max="100" value="${Math.round(der*100)}" `+
+         `oninput="onLine('${l[0]}','${l[1]}',this.value)"></div>`;
+      h+=`<div class="btnrow" style="padding:4px 0 0">`+
+         `<button onclick="onLine('${l[0]}','${l[1]}',0)">LEITUNG KAPPEN</button>`+
+         `<button onclick="onLine('${l[0]}','${l[1]}',100)">WIEDERHERSTELLEN</button></div></div>`;
+      ctl.innerHTML=h;
+    }
+  }else{
+    head.textContent="Manipulation";
+    ctl.innerHTML=`<div class="empty">Klicke eine <b style="color:var(--text)">Zone</b>, `+
+      `eine <b style="color:var(--text)">AC-Leitung</b> oder ein `+
+      `<b style="color:var(--dc)">HVDC-Kabel</b> auf der Karte.</div>`;
+  }
+}
+
+function slider(id,label,min,max,val,handler){
+  const cls=val>0?"up":val<0?"dn":"";
+  const disp=val===0?"±0":((val>0?"+":"")+(val/1000).toFixed(1)+" GW");
+  return `<div class="slrow"><div class="lab"><span>${label}</span>`+
+    `<span class="amt ${cls}" id="amt-${id}">${disp}</span></div>`+
+    `<input type="range" min="${min}" max="${max}" value="${val}" step="100" oninput="${handler}"></div>`;
+}
+function fmtDelta(v){v=+v;return v===0?"±0":((v>0?"+":"")+(v/1000).toFixed(1)+" GW");}
+function onGen(c,k,v){v=+v;genShock[c]=genShock[c]||{};genShock[c][k]=v;
+  updAmt(`gen-${c}-${k}`,v);recompute();}
+function onLoad(c,v){v=+v;loadShock[c]=v;updAmt(`load-${c}`,v);recompute();}
+function updAmt(id,v){const el=document.getElementById("amt-"+id);if(!el)return;
+  el.textContent=fmtDelta(v);el.className="amt "+(v>0?"up":v<0?"dn":"");}
+function onLine(a,b,pct){lineDerate[a+"-"+b]=(+pct)/100;
+  const el=document.getElementById("amt-line");
+  if(el)el.textContent=Math.round(+pct)+"%";   // kein Rebuild: Slider-Drag bleibt erhalten
+  recompute();}
+function onDC(key,mw){dcSet[key]=+mw;
+  const el=document.getElementById("amt-dc");
+  if(el)el.textContent=(mw>=0?"+":"")+Math.round(mw)+" MW";
+  recompute();}
+
+/* ── N-1-Stresstest ──
+   Kappt jede Verbindung EINZELN auf dem AKTUELLEN Zustand (inkl. deiner
+   Schocks und der A11-Kalibrierung) und bewertet: Inselbildung (+1000),
+   neue Overloads (+10 je), Anstieg der max. Auslastung. Das ist die
+   Rechnung, die TSOs laufend fahren. */
+function runN1(){
+  const base=solve();
+  const rows=[];
+  LINES.forEach(l=>{
+    const isDC=l[4]==="DC";
+    if(!isDC&&lineFactor(l)<1e-9)return;   // schon gekappt
+    let saved;
+    if(isDC){saved=dcSet[LKEY(l)];dcSet[LKEY(l)]=0;}
+    else{saved=lineDerate[l[0]+"-"+l[1]];lineDerate[l[0]+"-"+l[1]]=0;}
+    const r=solve();
+    if(isDC){if(saved===undefined)delete dcSet[LKEY(l)];else dcSet[LKEY(l)]=saved;}
+    else{if(saved===undefined)delete lineDerate[l[0]+"-"+l[1]];else lineDerate[l[0]+"-"+l[1]]=saved;}
+    const newOver=Math.max(0,r.nOver-base.nOver);
+    const split=r.nIslands>base.nIslands;
+    const du=Math.max(0,r.maxUtil-base.maxUtil);
+    rows.push({l,split,newOver,maxUtil:r.maxUtil,
+      severity:(split?1000:0)+10*newOver+100*du});
+  });
+  rows.sort((a,b)=>b.severity-a.severity);
+  return{base,rows,critical:rows.filter(r=>r.split||r.newOver>0).length};
+}
+
+function showN1(){
+  const res=runN1();
+  const card=document.getElementById("n1card");
+  const list=document.getElementById("n1list");
+  const head=document.getElementById("n1head");
+  card.style.display="block";
+  head.textContent=res.critical===0
+    ?"N-1-Stresstest: NETZ IST N-1-SICHER"
+    :`N-1-Stresstest: ${res.critical} von ${res.rows.length} Ausfällen kritisch`;
+  list.innerHTML=res.rows.slice(0,12).map((r,i)=>{
+    const l=r.l;
+    const tag=l[4]==="DC"?` <span class="dctag">DC${l[6]?" · "+l[6]:""}</span>`:"";
+    let verdict;
+    if(r.split)verdict='<span style="color:var(--bad)">INSELBILDUNG</span>';
+    else if(r.newOver>0)verdict=`<span style="color:var(--bad)">+${r.newOver} Overload${r.newOver>1?"s":""}</span>`;
+    else if(r.severity>1)verdict=`<span style="color:var(--warn)">Auslastung → ${Math.round(r.maxUtil*100)}%</span>`;
+    else verdict='<span style="color:var(--ok)">unkritisch</span>';
+    return `<div class="fr" style="cursor:pointer" onclick="applyOutage(${LINES.indexOf(l)})"`+
+      ` title="Klick wendet diesen Ausfall an">`+
+      `<span>${i+1}. ${l[0]}–${l[1]}${tag}</span><span class="rt">${verdict}</span></div>`;
+  }).join("");
+}
+function applyOutage(li){
+  const l=LINES[li];
+  if(l[4]==="DC")dcSet[LKEY(l)]=0;else lineDerate[l[0]+"-"+l[1]]=0;
+  selected={type:"line",key:l};buildControls();recompute();
+}
+
+/* ── Szenario-Presets ── */
+function preset(which){
+  resetAll(true);
+  if(which==="fr")genShock.FR={nuclear:-20000};
+  else if(which==="dewind")genShock.DE={wind:+30000};
+  else if(which==="nordlink"){
+    LINES.forEach(l=>{if(l[6]==="NordLink"||l[6]==="North Sea Link")
+      dcSet[LKEY(l)]=0;});
+  }
+  else if(which==="iberia"){lineDerate["FR-ES"]=0;}   // Pyrenäen-Kupplung weg
+  else if(which==="flaute"){
+    ["DE","AT","NL","BE","PL","FR","ES","DK1","DK2","GB","IE","SE4"].forEach(c=>{
+      if(!ZONES[c])return;
+      genShock[c]={};
+      if(ZONES[c].gen.wind)genShock[c].wind=-Math.round(ZONES[c].gen.wind*0.9);
+      if(ZONES[c].gen.solar)genShock[c].solar=-Math.round(ZONES[c].gen.solar*0.95);
+      loadShock[c]=Math.round(ZONES[c].load*0.08);
+    });
+  }
+  else if(which==="baltic"){
+    // Baltikum-Inselung: LitPol weg + alle DC-Kabel dorthin auf 0
+    lineDerate["PL-LT"]=0;
+    LINES.forEach(l=>{if(l[6]==="NordBalt"||l[6]==="EstLink 1+2")dcSet[LKEY(l)]=0;});
+  }
+  selected={type:null,key:null};buildControls();recompute();
+}
+function resetAll(keepSel){
+  genShock={};loadShock={};lineDerate={};dcSet={};
+  if(!keepSel)selected={type:null,key:null};
+  buildControls();recompute();
+}
+
+/* ── Init ── */
+buildSVG();refreshBaseline();buildControls();recompute();tick();
+loadLive();
+if(window.GRID_LIVE_ENDPOINT)setInterval(loadLive,300000);
+</script>
+</body>
+</html>

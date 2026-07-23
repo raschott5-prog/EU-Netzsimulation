@@ -1,0 +1,40 @@
+name: Grid-Snapshot → GitHub Pages
+on:
+  schedule:
+    - cron: "*/30 * * * *"    # alle 30 Min (ENTSO-E publiziert im 15-Min-Takt;
+                              # Actions-Cron läuft oft einige Minuten verspätet)
+  workflow_dispatch: {}        # manueller Start über den Actions-Tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: ENTSO-E abrufen, kalibrieren, Bundle bauen
+        env:
+          ENTSOE_KEY: ${{ secrets.ENTSOE_KEY }}
+        run: python snapshot.py --out docs
+        # Exit 1 bei zu wenig Daten -> Deploy entfaellt, letzter guter
+        # Snapshot bleibt online.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
