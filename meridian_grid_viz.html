@@ -524,20 +524,28 @@ function render(res){
     e.flow.setAttribute("x1",A.x);e.flow.setAttribute("y1",A.y);
     e.flow.setAttribute("x2",Bn.x);e.flow.setAttribute("y2",Bn.y);
     if(f.cut){
-      // gekappte Leitung: statisch rot gepunktet – der fehlende Pfad soll
-      // sichtbar bleiben, nicht verschwinden
       e.flow.setAttribute("stroke","var(--bad)");
-      e.flow.setAttribute("stroke-width","1.6");
-      e.flow.setAttribute("stroke-dasharray","1 4");
-      e.flow.setAttribute("opacity","0.7");
+      e.flow.setAttribute("stroke-width","1.8");
+      e.flow.setAttribute("stroke-dasharray","2 5");
+      e.flow.setAttribute("opacity","0.6");
       e.flow.dataset.speed=0;
     }else{
-      e.flow.setAttribute("stroke",utilColor(f));
-      e.flow.setAttribute("stroke-width",w.toFixed(1));
-      // AC: Punktlinie (Physik "fließt"); DC: lange Striche (geschalteter Pfad)
-      e.flow.setAttribute("stroke-dasharray",f.kind==="DC"?"7 5":"2 6");
-      e.flow.setAttribute("opacity",f.abs<60?0.12:0.95);
-      e.flow.dataset.speed=Math.min(3,0.4+f.util*2.2);
+      // Strichstärke: klar nach Last skaliert (1px @ 0% → 12px @ 100%+)
+      // Richtung: Strichmuster bewegt sich vom Sender zum Empfänger.
+      // AC: kurze Punkte (Physik verteilt); DC: längere Striche (Fahrplan).
+      const thick = f.kind==="DC"
+        ? 1.5 + Math.min(1.0, f.util) * 7          // DC: 1.5–8.5 px
+        : 0.8 + Math.min(1.0, f.util) * 10;        // AC: 0.8–10.8 px
+      const dash  = f.kind==="DC" ? "14 8" : "5 7";
+      const spd   = Math.min(4, 0.5 + f.util * 3); // schneller = stärker belastet
+      e.flow.setAttribute("stroke", utilColor(f));
+      e.flow.setAttribute("stroke-width", thick.toFixed(1));
+      e.flow.setAttribute("stroke-dasharray", dash);
+      e.flow.setAttribute("opacity", f.abs < 60 ? 0.10 : 0.92);
+      e.flow.dataset.speed = spd;
+      // Richtung: Vorzeichen des Offset bestimmt Flussrichtung a→b oder b→a.
+      // Der tick()-Loop schreibt den laufenden Offset; wir merken uns das Vorzeichen.
+      e.flow.dataset.dir = f.flow >= 0 ? -1 : 1;   // -1 = a→b, +1 = b→a
     }
   });
   CODES.forEach(c=>{
@@ -582,7 +590,12 @@ function tick(){
   anim+=1;
   for(const k in edgeEls){
     const fl=edgeEls[k].flow,sp=parseFloat(fl.dataset.speed||0);
-    fl.setAttribute("stroke-dashoffset",-(anim*sp)%12);
+    if(sp===0)continue;
+    const dir=parseFloat(fl.dataset.dir||"-1");
+    const period=parseFloat(fl.getAttribute("stroke-dasharray")||"12").split
+      ? fl.getAttribute("stroke-dasharray").split(" ").reduce((a,b)=>+a + +b,0)
+      : 12;
+    fl.setAttribute("stroke-dashoffset",(anim*sp*dir)%period);
   }
   requestAnimationFrame(tick);
 }
